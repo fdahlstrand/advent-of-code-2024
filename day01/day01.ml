@@ -4,8 +4,7 @@ let whitespace = Str.regexp {|[ \t]|}
 
 let sum = List.fold_left ( + ) 0
 
-let tuple_of_list lst =
-  match lst with
+let tuple_of_list = function
   | [a; b] ->
       (a, b)
   | _ ->
@@ -20,15 +19,13 @@ let read_puzzle_input path =
   In_channel.with_open_text path In_channel.input_lines
   |> List.map tuple_of_string |> List.split
 
-let sort_lists lsts =
-  match lsts with a, b -> (List.sort compare a, List.sort compare b)
+let sort_lists (a, b) = (List.sort compare a, List.sort compare b)
 
-let rec count lst m =
-  match lst with
+let rec count m = function
   | [] ->
       0
   | h :: t ->
-      if h = m then 1 + count t m else count t m
+      if h = m then 1 + count m t else count m t
 
 let lists = read_puzzle_input puzzle_input
 
@@ -40,10 +37,10 @@ let total_distance = sum distances
 
 let similarity_scores =
   let a, b = lists in
-  List.map (fun e -> e * count b e) a
+  List.map (fun e -> e * count e b) a
 
 let similarity_score = sum similarity_scores
 
 let () =
-  Printf.printf "Total distance (part 1): %d\nSimilarity score (part 2): %d\n"
+  Printf.printf "\nTotal distance (part 1): %d\nSimilarity score (part 2): %d\n"
     total_distance similarity_score
