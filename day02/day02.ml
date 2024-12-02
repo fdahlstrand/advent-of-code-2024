@@ -19,28 +19,21 @@ let rec dampen d p lst =
 
 let is_in_range x = (1 <= x && x <= 3) || (-3 <= x && x <= -1)
 
-let is_increasing x = x > 0
-
-let is_decreasing x = x < 0
-
 let is_safe report =
-  (List.for_all is_increasing report || List.for_all is_decreasing report)
+  ( List.for_all (fun delta -> delta > 0) report
+  || List.for_all (fun delta -> delta < 0) report )
   && List.for_all is_in_range report
 
 let is_safe_dampened report =
-  dampen [report] [] report |> List.map difference |> List.map is_safe
-  |> List.exists (fun x -> x)
+  dampen [report] [] report |> List.map difference |> List.exists is_safe
 
 let reports = read_reports input_path
 
 let nbr_of_safe_reports =
-  List.map difference reports
-  |> List.map is_safe
-  |> List.filter (fun x -> x)
-  |> List.length
+  List.map difference reports |> List.filter is_safe |> List.length
 
 let nbr_of_safe_dampened_reports =
-  List.map is_safe_dampened reports |> List.filter (fun x -> x) |> List.length
+  List.filter is_safe_dampened reports |> List.length
 
 let () =
   Printf.printf
