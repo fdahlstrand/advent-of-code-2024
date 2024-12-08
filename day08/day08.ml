@@ -14,8 +14,6 @@ let ( -- ) {row= r1; col= c1} {row= r2; col= c2} = {row= r2 - r1; col= c2 - c1}
 
 let ( ++ ) {row= r1; col= c1} {row= r2; col= c2} = {row= r2 + r1; col= c2 + c1}
 
-let antinodes {pos= p1; _} {pos= p2; _} = [p1 ++ (p2 -- p1); p2 ++ (p1 -- p2)]
-
 let read_map path =
   In_channel.with_open_text path In_channel.input_lines
   |> List.mapi (fun row lst ->
@@ -63,6 +61,12 @@ let pairs_of_list lst =
 let is_on_map width height {row; col} =
   (0 <= row && row < width) && 0 <= col && col < height
 
+let antinodes width height {pos= p1; _} {pos= p2; _} =
+  let an1 = p1 ++ (p2 -- p1) in
+  let an2 = p2 ++ (p1 -- p2) in
+  (if is_on_map width height an1 then [an1] else [])
+  @ if is_on_map width height an2 then [an2] else []
+
 let harmonics width height {pos= p1; _} {pos= p2; _} =
   let rec harmonics' width height p dp =
     if is_on_map width height p then p :: harmonics' width height (p ++ dp) dp
@@ -72,38 +76,21 @@ let harmonics width height {pos= p1; _} {pos= p2; _} =
   let dp2 = p2 -- p1 in
   harmonics' width height p2 dp1 @ harmonics' width height p1 dp2
 
-let _the_map =
-  let m = read_map "./input/day08/sample.txt" in
+let calculate_antinodes f path =
+  let m = read_map path in
   let w, h = map_size m in
   List.filter (fun {freq= f; _} -> f != '.') m
   |> frequencies_of_map
   |> List.map (fun lst -> pairs_of_list lst)
   |> List.flatten
-  |> List.map (fun (a, b) -> harmonics w h a b)
+  |> List.map (fun (a, b) -> f w h a b)
+  |> List.flatten |> PosSet.of_list |> PosSet.cardinal
 
-let antinode_count =
-  let m = read_map "./input/day08/input.txt" in
-  let w, h = map_size m in
-  List.filter (fun {freq= f; _} -> f != '.') m
-  |> frequencies_of_map
-  |> List.map (fun lst -> pairs_of_list lst)
-  |> List.flatten
-  |> List.map (fun (a, b) -> antinodes a b)
-  |> List.flatten
-  |> List.filter (is_on_map w h)
-  |> PosSet.of_list |> PosSet.cardinal
+let input_path = "./input/day08/input.txt"
 
-let harmonics_count =
-  let m = read_map "./input/day08/input.txt" in
-  let w, h = map_size m in
-  List.filter (fun {freq= f; _} -> f != '.') m
-  |> frequencies_of_map
-  |> List.map (fun lst -> pairs_of_list lst)
-  |> List.flatten
-  |> List.map (fun (a, b) -> harmonics w h a b)
-  |> List.flatten
-  |> List.filter (is_on_map w h)
-  |> PosSet.of_list |> PosSet.cardinal
+let antinode_count = calculate_antinodes antinodes input_path
+
+let harmonics_count = calculate_antinodes harmonics input_path
 
 let () =
   Printf.printf
