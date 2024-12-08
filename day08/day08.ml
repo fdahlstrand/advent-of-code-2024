@@ -60,8 +60,26 @@ let pairs_of_list lst =
   in
   pairs_of_list' [] lst
 
-let is_on_map (width : int) (height : int) {row; col} =
+let is_on_map width height {row; col} =
   (0 <= row && row < width) && 0 <= col && col < height
+
+let harmonics width height {pos= p1; _} {pos= p2; _} =
+  let rec harmonics' width height p dp =
+    if is_on_map width height p then p :: harmonics' width height (p ++ dp) dp
+    else []
+  in
+  let dp1 = p1 -- p2 in
+  let dp2 = p2 -- p1 in
+  harmonics' width height p2 dp1 @ harmonics' width height p1 dp2
+
+let _the_map =
+  let m = read_map "./input/day08/sample.txt" in
+  let w, h = map_size m in
+  List.filter (fun {freq= f; _} -> f != '.') m
+  |> frequencies_of_map
+  |> List.map (fun lst -> pairs_of_list lst)
+  |> List.flatten
+  |> List.map (fun (a, b) -> harmonics w h a b)
 
 let antinode_count =
   let m = read_map "./input/day08/input.txt" in
@@ -75,5 +93,21 @@ let antinode_count =
   |> List.filter (is_on_map w h)
   |> PosSet.of_list |> PosSet.cardinal
 
+let harmonics_count =
+  let m = read_map "./input/day08/input.txt" in
+  let w, h = map_size m in
+  List.filter (fun {freq= f; _} -> f != '.') m
+  |> frequencies_of_map
+  |> List.map (fun lst -> pairs_of_list lst)
+  |> List.flatten
+  |> List.map (fun (a, b) -> harmonics w h a b)
+  |> List.flatten
+  |> List.filter (is_on_map w h)
+  |> PosSet.of_list |> PosSet.cardinal
+
 let () =
-  Printf.printf "\nNbr of locations with an antinode: %d\n" antinode_count
+  Printf.printf
+    "\n\
+     Nbr of locations with an antinode: %d\n\
+     Nbr of locations with harmonics: %d\n"
+    antinode_count harmonics_count
