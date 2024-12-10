@@ -44,10 +44,27 @@ let walk m p =
   in
   walk' m PosSet.empty PosSet.empty p |> PosSet.cardinal
 
+let trails m p =
+  let rec trails' m trails visited p =
+    let h = PosMap.find p m in
+    let pn = next m h p in
+    if PosSet.mem p visited then trails
+    else if h = 9 then [p]
+    else
+      let visited' = PosSet.add p visited in
+      pn |> List.map (trails' m trails visited') |> List.concat
+  in
+  trails' m [] PosSet.empty p
+
 let total_score =
   let m = read_topographic_map "./input/day10/input.txt" in
   trail_heads m |> List.map (walk m) |> List.fold_left ( + ) 0
 
-let () = Printf.printf "\nTotal score: %d\n" total_score
+let total_rating =
+  let m = read_topographic_map "./input/day10/input.txt" in
+  trail_heads m
+  |> List.map (trails m)
+  |> List.map List.length |> List.fold_left ( + ) 0
 
-let _m = read_topographic_map "./input/day10/sample.txt"
+let () =
+  Printf.printf "\nTotal score: %d\nTotal rating: %d\n" total_score total_rating
