@@ -65,6 +65,38 @@ let rec compact_aux fs acc to_process =
 
 let compact fs = compact_aux fs [] (collect_files fs) |> List.rev
 
+let rec move_aux f out moved fs =
+  match f with
+  | Empty _ ->
+      fs
+  | File (file_len, id) -> (
+    match fs with
+    | Empty space_len :: rest ->
+        if file_len = space_len && not moved then
+          move_aux f (File (file_len, id) :: out) true rest
+        else if file_len < space_len && not moved then
+          move_aux f
+            (Empty (space_len - file_len) :: File (file_len, id) :: out)
+            true rest
+        else move_aux f (Empty space_len :: out) moved rest
+    | File (file_len', id') :: rest ->
+        if id' = id then
+          if moved then move_aux f (Empty file_len' :: out) moved rest
+          else move_aux f (File (file_len', id') :: out) true rest
+        else move_aux f (File (file_len', id') :: out) moved rest
+    | [] ->
+        out )
+
+let move_and_compact fs =
+  let rec move_and_compact_aux fs = function
+    | f :: t ->
+        let fs' = move_aux f [] false fs |> List.rev in
+        move_and_compact_aux fs' t
+    | [] ->
+        fs
+  in
+  move_and_compact_aux fs (collect_files fs)
+
 let rec checksum_elt pos acc = function
   | File (len, id) ->
       if len > 0 then
@@ -89,5 +121,6 @@ let s =
   |> String.trim
 
 let () =
-  Printf.printf "\nFilesystem checksum: %d\n"
+  Printf.printf "\nFilesystem checksum: %d\nFilsystem checksum: %d\n"
     (read_disk_map s |> compact |> checksum)
+    (read_disk_map s |> move_and_compact |> checksum)
