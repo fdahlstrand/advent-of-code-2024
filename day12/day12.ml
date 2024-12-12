@@ -56,6 +56,57 @@ let collect_regions m =
   in
   collect_regions_aux m PosSet.empty [] (GardenMap.bindings m)
 
+let north region {row; col} = not (PosSet.mem {row= row - 1; col} region)
+
+let east region {row; col} = not (PosSet.mem {row; col= col + 1} region)
+
+let south region {row; col} = not (PosSet.mem {row= row + 1; col} region)
+
+let west region {row; col} = not (PosSet.mem {row; col= col - 1} region)
+
+let horizontal {row; col} = [{row; col= col - 1}; {row; col= col + 1}]
+
+let vertical {row; col} = [{row= row - 1; col}; {row= row + 1; col}]
+
+let trace_fence region fd fc p =
+  let rec trace_fence_aux region visited p =
+    let pn =
+      fd p
+      |> List.filter (fun p' ->
+             PosSet.mem p' region
+             && (not (PosSet.mem p' visited))
+             && fc region p' )
+    in
+    let visited' = PosSet.add p visited in
+    List.fold_left (trace_fence_aux region) visited' pn
+  in
+  trace_fence_aux region PosSet.empty p
+
+let find_fences region =
+  let rec find_fences_aux region fd fc visited fences plants =
+    match plants with
+    | p :: t ->
+        if PosSet.mem p visited then
+          find_fences_aux region fd fc visited fences t
+        else
+          let fence = trace_fence region fd fc p in
+          let fences' = fence :: fences in
+          find_fences_aux region fd fc (PosSet.union visited fence) fences' t
+    | [] ->
+        fences
+  in
+  let find fd fc =
+    find_fences_aux region fd fc PosSet.empty []
+      (PosSet.filter (fc region) region |> PosSet.to_list)
+  in
+  [ find horizontal north
+  ; find vertical east
+  ; find horizontal south
+  ; find vertical west ]
+
+let count_sides region =
+  find_fences region |> List.map List.length |> List.fold_left ( + ) 0
+
 let area region = PosSet.cardinal region
 
 let perimeter region =
@@ -75,4 +126,11 @@ let price =
   |> List.map (fun (_, r) -> area r * perimeter r)
   |> List.fold_left ( + ) 0
 
-let () = Printf.printf "\nFence cost: %d\n" price
+let fence_price =
+  read_garden_map "./input/day12/input.txt"
+  |> collect_regions
+  |> List.map (fun (_, r) -> area r * count_sides r)
+  |> List.fold_left ( + ) 0
+
+let () =
+  Printf.printf "\nFence cost: %d\nFence cost (sides): %d\n" price fence_price
