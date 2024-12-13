@@ -33,7 +33,32 @@ let calculate a b c =
   let y_rrng = (int_of_ceil_float (y_v 0), int_of_floor_float (y_v 100)) in
   let range = (max (fst x_rrng) (fst y_rrng), min (snd x_rrng) (snd y_rrng)) in
   (* (x, y, x_rrng, y_rrng, range, eval x y [] range) *)
-  eval x y [] range
+  if c mod gcd = 0 then eval x y [] range else []
+
+let eqn a b c =
+  let gcd, (s, t) = ext_euclid a b in
+  let k = c / gcd in
+  let x r = (k * s) - (b / gcd * r) in
+  let y r = (k * t) + (a / gcd * r) in
+  (c mod gcd = 0, (x 0, x 1 - x 0), (y 0, y 1 - y 0))
+
+let solve (c11, a1) (c21, a2) (c12, b1) (c22, b2) =
+  let c1 = c12 - c11 in
+  let c2 = c22 - c21 in
+  let d = (a1 * -b2) - (-b1 * a2) in
+  let dx = (c1 * -b2) - (-b1 * c2) in
+  let dy = (a1 * c2) - (c1 * a2) in
+  let x = dx / d in
+  let y = dy / d in
+  (c11 + (a1 * x), c22 + (b2 * y))
+
+let check_machine_v2 adjust ((ax, ay), (bx, by), (px, py)) =
+  let _, e11, e21 = eqn ax bx (px + adjust) in
+  let _, e12, e22 = eqn ay by (py + adjust) in
+  let a, b = solve e11 e21 e12 e22 in
+  if (a * ax) + (b * bx) = px + adjust && (a * ay) + (b * by) = py + adjust then
+    Some (a, b)
+  else None
 
 let check_machine adjust ((ax, ay), (bx, by), (px, py)) =
   let push_x = calculate ax bx (px + adjust) |> PushSet.of_list in
@@ -71,12 +96,11 @@ let tokens =
   |> List.map List.hd |> List.fold_left ( + ) 0
 
 let adjusted_tokens =
-  read_machines "./input/day13/sample.txt"
-  |> List.map (check_machine 10000000000000)
-  |> List.map (List.map (fun (a, b) -> (3 * a) + b))
-  |> List.filter (fun l -> not (List.is_empty l))
-  |> List.map (List.sort Stdlib.compare)
-  |> List.map List.hd |> List.fold_left ( + ) 0
+  read_machines "./input/day13/input.txt"
+  |> List.map (check_machine_v2 10000000000000)
+  |> List.filter Option.is_some |> List.map Option.get
+  |> List.map (fun (a, b) -> (3 * a) + b)
+  |> List.fold_left ( + ) 0
 
 let () =
   Printf.printf "\nMinimum tokens: %d\nAdjusted minimum tokens %d\n" tokens
