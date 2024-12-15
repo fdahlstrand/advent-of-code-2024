@@ -8,7 +8,7 @@ end
 
 module PosMap = Map.Make (Pos)
 
-type map_element = Wall | Box | Robot
+type map_element = Wall | Box | WideBoxLeft | WideBoxRight | Robot
 
 type direction = Up | Right | Down | Left
 
@@ -64,16 +64,39 @@ let _render_map {width; height; elements} =
         '$'
     | Some Box ->
         'O'
+    | Some WideBoxLeft ->
+        '['
+    | Some WideBoxRight ->
+        ']'
     | Some Robot ->
         '@'
     | None ->
         ' '
   in
-  Array.init_matrix width height f
+  Array.init_matrix height width f
   |> Array.map (fun a -> Array.to_seq a |> String.of_seq)
   |> Array.to_list |> String.concat "\n"
 
 let make_warehouse_map lst =
+  let max_col = List.fold_left max 0 (List.map (fun ((_, c), _) -> c) lst) in
+  let max_row = List.fold_left max 0 (List.map (fun ((r, _), _) -> r) lst) in
+  {width= max_col + 1; height= max_row + 1; elements= PosMap.of_list lst}
+
+let make_wide_warehouse_map lst =
+  let lst =
+    List.map (fun ((r, c), e) -> ((r, 2 * c), e)) lst
+    |> List.map (fun ((r, c), e) ->
+           match e with
+           | Wall ->
+               [((r, c), Wall); ((r, c + 1), Wall)]
+           | Box ->
+               [((r, c), WideBoxLeft); ((r, c + 1), WideBoxRight)]
+           | Robot ->
+               [((r, c), Robot)]
+           | _ ->
+               failwith "Error" )
+    |> List.flatten
+  in
   let max_col = List.fold_left max 0 (List.map (fun ((_, c), _) -> c) lst) in
   let max_row = List.fold_left max 0 (List.map (fun ((r, _), _) -> r) lst) in
   {width= max_col + 1; height= max_row + 1; elements= PosMap.of_list lst}
@@ -95,24 +118,51 @@ let next (r, c) = function
 let is_empty pos map =
   match PosMap.find_opt pos map.elements with None -> true | _ -> false
 
-let rec move map pos dir =
+let rec move_element map pos dir e =
+  let pos' = next pos dir in
+  let map' = move map pos' dir in
+  if is_empty pos' map' then
+    {map' with elements= PosMap.remove pos map'.elements |> PosMap.add pos' e}
+  else map
+
+and move map pos dir =
   match PosMap.find_opt pos map.elements with
   | Some Wall ->
       map
   | Some Box ->
-      let pos' = next pos dir in
-      let map' = move map pos' dir in
-      if is_empty pos' map' then
-        { map' with
-          elements= PosMap.remove pos map'.elements |> PosMap.add pos' Box }
-      else map
+      move_element map pos dir Box
+  | Some WideBoxLeft -> (
+    match dir with
+    | Up | Down ->
+        let r, c = pos in
+        let map' = move_element map (r, c + 1) dir WideBoxRight in
+        let map' = move_element map' (r, c) dir WideBoxLeft in
+        if is_empty (r, c) map' && is_empty (r, c + 1) map' then map' else map
+    | Left ->
+        failwith "Impossible"
+    | Right ->
+        let r, c = pos in
+        let map' = move_element map (r, c + 1) dir WideBoxRight in
+        if is_empty (r, c + 1) map' then
+          move_element map' (r, c) dir WideBoxLeft
+        else map )
+  | Some WideBoxRight -> (
+    match dir with
+    | Up | Down ->
+        let r, c = pos in
+        let map' = move_element map (r, c - 1) dir WideBoxLeft in
+        let map' = move_element map' (r, c) dir WideBoxRight in
+        if is_empty (r, c) map' && is_empty (r, c - 1) map' then map' else map
+    | Right ->
+        failwith "Impossible"
+    | Left ->
+        let r, c = pos in
+        let map' = move_element map (r, c - 1) dir WideBoxLeft in
+        if is_empty (r, c - 1) map' then
+          move_element map' (r, c) dir WideBoxRight
+        else map )
   | Some Robot ->
-      let pos' = next pos dir in
-      let map' = move map pos' dir in
-      if is_empty pos' map' then
-        { map' with
-          elements= PosMap.remove pos map'.elements |> PosMap.add pos' Robot }
-      else map
+      move_element map pos dir Robot
   | None ->
       map
 
@@ -125,8 +175,8 @@ let rec process map = function
 
 let gps_coordinate (r, c) = (r * 100) + c
 
-let sum_of_coordinates map =
-  PosMap.filter (fun _ e -> e = Box) map.elements
+let sum_of_coordinates element map =
+  PosMap.filter (fun _ e -> e = element) map.elements
   |> PosMap.bindings |> List.map fst |> List.map gps_coordinate
   |> List.fold_left ( + ) 0
 
@@ -135,5 +185,13 @@ let map, instructions =
   (make_warehouse_map e, i)
 
 let () =
-  Printf.printf "\nSum of GPS coordinates: %d\n%!"
-    (process map instructions |> sum_of_coordinates)
+  Printf.printf "\nSum of GPS coordinates (Warehouse #1): %d\n%!"
+    (process map instructions |> sum_of_coordinates Box)
+
+let map, instructions =
+  let e, i = read_input "./input/day15/input.txt" in
+  (make_wide_warehouse_map e, i)
+
+let () =
+  Printf.printf "Sum of GPS coordinates (Warehouse #2): %d\n%!"
+    (process map instructions |> sum_of_coordinates WideBoxLeft)
