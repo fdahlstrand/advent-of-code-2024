@@ -119,6 +119,21 @@ let run (cpu, mem) =
   let _, _, out = run' (cpu, mem, []) in
   out |> List.rev
 
+let step_size digit = 1 lsl (3 * digit)
+
+let cpu, mem = read_debugger_input "./input/day17/input.txt" |> make_cpu
+
+let target = Memory.bindings mem |> List.map snd
+
+let options digit offset target =
+  [0; 1; 2; 3; 4; 5; 6; 7]
+  |> List.map (fun n ->
+         run ({cpu with a= offset + (n * step_size digit)}, mem)
+         |> fun lst -> List.nth_opt lst digit )
+  |> List.mapi (fun n v -> (n, v))
+  |> List.filter_map (fun (n, v) ->
+         match v with Some x when x = target -> Some (n, x) | _ -> None )
+
 let () =
   Printf.printf "\nProgram Output: %s\n%!"
     ( read_debugger_input "./input/day17/input.txt"
