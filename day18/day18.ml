@@ -166,10 +166,27 @@ let a_star start goal h neighbours =
     PosMap.(empty |> add start 0)
     PosMap.(empty)
 
-let coords = read_coords "./input/day18/input.txt" |> take 1024
+let has_path coords n =
+  let space =
+    coords |> take n
+    |> List.fold_left
+         (fun spc coord -> set_corrupted coord spc)
+         (make_memory_space 71 71)
+  in
+  let path = a_star (0, 0) (70, 70) (manhattan (0, 0)) (neighbours space) in
+  List.length path > 0
+
+let rec find_blocker coords n m =
+  if m - n <= 1 then (m, List.nth coords n)
+  else
+    let p = n + ((m - n) / 2) in
+    if has_path coords p then find_blocker coords p m
+    else find_blocker coords n p
+
+let coords = read_coords "./input/day18/input.txt"
 
 let space =
-  coords
+  coords |> take 1024
   |> List.fold_left
        (fun spc coord -> set_corrupted coord spc)
        (make_memory_space 71 71)
@@ -179,3 +196,7 @@ let () = print_endline (_render_memory_space space)
 let path = a_star (0, 0) (70, 70) (manhattan (0, 0)) (neighbours space)
 
 let () = Printf.printf "Minimal path: %d\n%!" (List.length path)
+
+let _, (y, x) = find_blocker coords 0 3500
+
+let () = Printf.printf "Coords of blocking byte %d,%d" x y
