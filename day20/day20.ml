@@ -171,40 +171,47 @@ let path_of_prev goal prev =
   in
   path_of_prev_aux goal [] prev
 
-let gain dt times p1 p2 =
-  match (PosMap.find_opt p1 times, PosMap.find_opt p2 times) with
-  | Some t1, Some t2 ->
-      Some (t2 - t1 - dt)
-  | _ ->
-      None
+let distance (r1, c1) (r2, c2) = abs (r1 - r2) + abs (c1 - c2)
 
-let cheat ((r, c) as p) times =
-  [(r - 2, c); (r, c + 2); (r + 2, c); (r, c - 2)]
-  |> List.map (gain 2 times p)
-  |> List.filter_map (function Some t when t > 0 -> Some t | _ -> None)
+let time_saved p1 p2 timed_path =
+  let dt = distance p1 p2 in
+  let t1 = PosMap.find p1 timed_path in
+  let t2 = PosMap.find p2 timed_path in
+  t2 - t1 - dt
 
-let collect_cheats path =
-  let times = path |> List.mapi (fun t p -> (p, t)) |> PosMap.of_list in
-  let rec collect_cheats_aux times acc = function
-    | n :: rest ->
-        let g = cheat n times in
-        collect_cheats_aux times (g :: acc) rest
+let cheat p max_t timed_path =
+  PosMap.filter (fun p' _ -> distance p p' <= max_t) timed_path
+  |> PosMap.bindings
+  |> List.map (fun (p', _) -> time_saved p p' timed_path)
+  |> List.filter (fun dt -> dt > 0)
+
+let all_cheats dt path =
+  let timed_path = path |> List.mapi (fun t p -> (p, t)) |> PosMap.of_list in
+  let rec all_cheats_aux timed_path acc = function
+    | p :: rest ->
+        let cheats = cheat p dt timed_path in
+        all_cheats_aux timed_path (cheats :: acc) rest
     | _ ->
-        acc |> List.filter (fun g -> not (List.is_empty g))
+        acc |> List.filter (fun g -> not (List.is_empty g)) |> List.flatten
   in
-  collect_cheats_aux times [] path
+  all_cheats_aux timed_path [] path
 
 let map = read_map "./input/day20/input.txt"
-
-(* let times = path |> List.mapi (fun t p -> (p, t)) |> PosMap.of_list *)
 
 let () =
   let path =
     ucs (neighbours map) (find_start map) (find_end map)
     |> path_of_prev (find_end map)
   in
-  let cheats = collect_cheats path in
-  let cheat_count =
-    cheats |> List.flatten |> List.filter (fun t -> t >= 100) |> List.length
-  in
+  let cheats = all_cheats 2 path in
+  let cheat_count = cheats |> List.filter (fun t -> t >= 100) |> List.length in
   Printf.printf "\nNumber of cheats %d\n%!" cheat_count
+
+let () =
+  let path =
+    ucs (neighbours map) (find_start map) (find_end map)
+    |> path_of_prev (find_end map)
+  in
+  let cheats = all_cheats 20 path in
+  let cheat_count = cheats |> List.filter (fun t -> t >= 100) |> List.length in
+  Printf.printf "Number of cheats %d\n%!" cheat_count
