@@ -37,6 +37,17 @@ module PrioQueue = struct
         (prio, elt, remove_top queue)
 
   let is_empty = function Empty -> true | _ -> false
+
+  let rec remove elt queue =
+    match queue with
+    | Empty ->
+        queue
+    | Node (_, e, _, _) as queue when e = elt ->
+        remove_top queue
+    | Node (p, e, left, right) ->
+        Node (p, e, remove elt left, remove elt right)
+
+  let update_prio elt prio' queue = remove elt queue |> insert prio' elt
 end
 
 type map_element = Empty | Wall | Start | End
@@ -58,6 +69,7 @@ module Node = struct
 end
 
 module Maze = Map.Make (Pos)
+module PosSet = Set.Make (Pos)
 module NodeMap = Map.Make (Node)
 module NodeSet = Set.Make (Node)
 
@@ -165,37 +177,6 @@ let rec _print_moves moves =
   | _ ->
       ()
 
-let visited_score pos maze_score =
-  match Maze.find_opt pos maze_score with
-  | Some score ->
-      score
-  | None ->
-      Int.max_int
-
-let walk maze =
-  let start_pos = find_start maze in
-  let end_pos = find_end maze in
-  let rec walk' maze next visited =
-    match next with
-    | (pos, dir, score) :: rest ->
-        if pos = end_pos then
-          if score < visited_score pos visited then
-            let visited' = Maze.update pos (fun _ -> Some score) visited in
-            walk' maze rest visited'
-          else walk' maze rest visited
-        else
-          let next' =
-            next_moves maze (pos, dir, score)
-            |> List.filter (fun (pos, _, score) ->
-                   score < visited_score pos visited )
-          in
-          let visited' = Maze.update pos (fun _ -> Some score) visited in
-          walk' maze (next' @ rest) visited'
-    | _ ->
-        Maze.find end_pos visited
-  in
-  walk' maze [(start_pos, East, 0)] Maze.empty
-
 let update_neighbours maze q seen ((pos_u, dir_u), dist_u) dist prev =
   let ns =
     next_moves maze (pos_u, dir_u, dist_u)
@@ -206,9 +187,17 @@ let update_neighbours maze q seen ((pos_u, dir_u), dist_u) dist prev =
       let dist_v =
         NodeMap.find_opt (pos, dir) dist' |> Option.value ~default:Int.max_int
       in
-      (*TODO: Handle case when alt = dist_v *)
-      if alt < dist_v then
-        ( q' (*TODO: Add v to q*)
+      if alt = dist_v then
+        let prev_v =
+          NodeMap.find_opt (pos, dir) prev' |> Option.value ~default:[]
+        in
+        ( q'
+        , dist'
+        , NodeMap.update (pos, dir)
+            (fun _ -> Some ((pos_u, dir) :: prev_v))
+            prev' )
+      else if alt < dist_v then
+        ( PrioQueue.update_prio (pos, dir) alt q'
         , NodeMap.update (pos, dir) (fun _ -> Some alt) dist'
         , NodeMap.update (pos, dir) (fun _ -> Some [(pos_u, dir_u)]) prev' )
       else (q', dist', prev') )
@@ -216,12 +205,11 @@ let update_neighbours maze q seen ((pos_u, dir_u), dist_u) dist prev =
 
 let dijkstra maze =
   let start_pos = find_start maze in
-  let end_pos = find_end maze in
+  (* let end_pos = find_end maze in *)
   let rec dijkstra_aux q seen dist prev =
     if PrioQueue.is_empty q then (dist, prev)
     else
       let dist_u, u, q' = PrioQueue.extract_min q in
-      (* Don't break when u = end_pos. There might be more paths that are equally good *)
       let q', dist', prev' =
         update_neighbours maze q' seen (u, dist_u) dist prev
       in
@@ -234,6 +222,53 @@ let dijkstra maze =
     NodeMap.(empty |> add (start_pos, East) 0)
     NodeMap.empty
 
+let end_nodes maze dist =
+  let end_pos = find_end maze in
+  NodeMap.filter (fun (p, _) _ -> p = end_pos) dist
+
+let min_cost nodes =
+  let lowest_cost _k a acc = min a acc in
+  NodeMap.fold lowest_cost nodes Int.max_int
+
+let ends maze dist =
+  let end_pos = find_end maze in
+  let end_nodes = NodeMap.filter (fun (p, _) _ -> p = end_pos) dist in
+  let c = min_cost end_nodes in
+  end_nodes
+  |> NodeMap.filter (fun _ v -> v = c)
+  |> NodeMap.bindings
+  |> List.map (fun (k, _) -> k)
+
+let rec collect_paths_from_node prev node =
+  match NodeMap.find_opt node prev with
+  | Some nodes ->
+      let paths = collect_paths prev [] nodes in
+      List.map (fun p -> node :: p) paths
+  | None ->
+      [[node]]
+
+and collect_paths prev acc = function
+  | n :: rest ->
+      let paths = collect_paths_from_node prev n in
+      let acc' = acc @ paths in
+      collect_paths prev acc' rest
+  | [] ->
+      acc
+
 let () =
-  Printf.printf "\nLowest score: %d\n%!"
-    (walk (read_map "./input/day16/input.txt"))
+  let maze = read_map "./input/day16/input.txt" in
+  let dist, _ = dijkstra maze in
+  let lowest_score = min_cost (end_nodes maze dist) in
+  Printf.printf "Lowest score: %d\n%!" lowest_score
+
+let () =
+  let maze = read_map "./input/day16/input.txt" in
+  let dist, prev = dijkstra maze in
+  let e = ends maze dist in
+  let paths = collect_paths prev [] e in
+  let tile_count =
+    paths |> List.flatten
+    |> List.map (fun (p, _) -> p)
+    |> PosSet.of_list |> PosSet.cardinal
+  in
+  Printf.printf "Tiles in best paths: %d\n%!" tile_count
