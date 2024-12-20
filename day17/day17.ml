@@ -121,20 +121,35 @@ let run (cpu, mem) =
 
 let step_size digit = 1 lsl (3 * digit)
 
-let cpu, mem = read_debugger_input "./input/day17/input.txt" |> make_cpu
-
-let target = Memory.bindings mem |> List.map snd
-
-let options digit offset target =
+let options cpu mem digit offset target =
   [0; 1; 2; 3; 4; 5; 6; 7]
   |> List.map (fun n ->
          run ({cpu with a= offset + (n * step_size digit)}, mem)
          |> fun lst -> List.nth_opt lst digit )
   |> List.mapi (fun n v -> (n, v))
   |> List.filter_map (fun (n, v) ->
-         match v with Some x when x = target -> Some (n, x) | _ -> None )
+         match v with Some x when x = target -> Some n | _ -> None )
+
+let find (cpu, mem) =
+  let targets = Memory.bindings mem |> List.map (fun (_, d) -> d) |> List.rev in
+  let digits = List.length targets - 1 in
+  let rec find_aux digit offset targets =
+    match targets with
+    | target :: rest ->
+        options cpu mem digit offset target
+        |> List.map (fun n ->
+               find_aux (digit - 1) (offset + (n * step_size digit)) rest )
+        |> List.fold_left min Int.max_int
+    | [] ->
+        offset
+  in
+  find_aux digits (step_size digits) targets
 
 let () =
-  Printf.printf "\nProgram Output: %s\n%!"
+  Printf.printf "Program Output: %s\n%!"
     ( read_debugger_input "./input/day17/input.txt"
     |> make_cpu |> run |> List.map string_of_int |> String.concat "," )
+
+let () =
+  Printf.printf "Register A value: %d\n%!"
+    (read_debugger_input "./input/day17/input.txt" |> make_cpu |> find)
