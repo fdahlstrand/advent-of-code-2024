@@ -138,9 +138,41 @@ let complexity code =
   let _ = Printf.printf "C\n%!" in
   len * num
 
-let () =
-  let cplx =
-    ["539A"; "964A"; "803A"; "149A"; "789A"]
-    |> List.map complexity |> List.fold_left ( + ) 0
+(* let () = *)
+(*   let cplx = *)
+(*     ["539A"; "964A"; "803A"; "149A"; "789A"] *)
+(*     |> List.map complexity |> List.fold_left ( + ) 0 *)
+(*   in *)
+(*   Printf.printf "Complexity: %d\n%!" cplx *)
+
+let rules =
+  let kp = directional_keypad in
+  let keys = List.map snd kp in
+  let moves =
+    List.concat (List.map (fun a -> List.map (fun b -> (a, b)) keys) keys)
   in
-  Printf.printf "Complexity: %d\n%!" cplx
+  List.map (fun (s, t) -> ((s, t), all_moves kp s t |> estimate_cost kp)) moves
+  |> List.map (fun (r, opts) ->
+         ( r
+         , List.fold_left
+             (fun (c, s) (c', s') -> if c' < c then (c', s') else (c, s))
+             (Int.max_int, []) opts
+           |> snd
+           |> fun lst -> lst @ ['A'] ) )
+
+let rec foo n seq =
+  let _ = Printf.printf "%d\n%!" n in
+  if n = 0 then seq
+  else
+    let seq' =
+      List.map
+        (fun s ->
+          all_pairs [] ('A' :: s)
+          |> List.map (fun p -> List.assoc p rules)
+          |> List.concat )
+        seq
+    in
+    let _ =
+      List.iter (fun s -> Printf.printf "> %d\n%!" (List.length s)) seq'
+    in
+    foo (n - 1) seq'
