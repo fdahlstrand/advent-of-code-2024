@@ -55,9 +55,35 @@ let find_interconnected graph n s =
   in
   find_interconnected_aux n VertexSet.empty [] [] s
 
-let starts_with_t s = String.get s 0 = 't'
+let partition_all lst =
+  let rec partition_all_aux acc lst =
+    match lst with
+    | h :: _ ->
+        let l1, l2 = List.partition (( = ) h) lst in
+        partition_all_aux (l1 :: acc) l2
+    | [] ->
+        acc
+  in
+  partition_all_aux [] lst
+
+let is_valid_partition partition =
+  let open Graph in
+  if List.is_empty partition then false
+  else
+    let len = VertexSet.cardinal (List.hd partition) in
+    len = List.length partition + 1
+
+let mutual_connected graph s =
+  let open Graph in
+  let vs = vertices_from graph s in
+  let vss =
+    List.map (fun v -> v :: vertices_from graph v |> VertexSet.of_list) vs
+    |> List.map (VertexSet.inter (s :: vs |> VertexSet.of_list))
+  in
+  vss |> partition_all |> List.filter is_valid_partition |> List.map List.hd
 
 let () =
+  let starts_with_t s = String.get s 0 = 't' in
   let graph = read_network_map "./input/day23/input.txt" in
   let count =
     Graph.vertices graph
@@ -69,3 +95,15 @@ let () =
     |> List.length
   in
   Printf.printf "Number of sets: %d\n%!" count
+
+let () =
+  let open Graph in
+  let compare_set_size a b = VertexSet.cardinal b - VertexSet.cardinal a in
+  let graph = read_network_map "./input/day23/input.txt" in
+  let lan_password =
+    Graph.vertices graph
+    |> List.map (mutual_connected graph)
+    |> List.flatten |> List.sort compare_set_size |> List.hd
+    |> Graph.VertexSet.to_list |> List.sort Stdlib.compare |> String.concat ","
+  in
+  Printf.printf "Password: %s\n%!" lan_password
