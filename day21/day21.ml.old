@@ -1,0 +1,251 @@
+let numeric_keypad =
+  [ ((0, 0), '7')
+  ; ((0, 1), '8')
+  ; ((0, 2), '9')
+  ; ((1, 0), '4')
+  ; ((1, 1), '5')
+  ; ((1, 2), '6')
+  ; ((2, 0), '1')
+  ; ((2, 1), '2')
+  ; ((2, 2), '3')
+  ; ((3, 1), '0')
+  ; ((3, 2), 'A') ]
+
+let directional_keypad =
+  [((0, 1), '^'); ((0, 2), 'A'); ((1, 0), '<'); ((1, 1), 'v'); ((1, 2), '>')]
+
+let distance (r1, c1) (r2, c2) = abs (r1 - r2) + abs (c1 - c2)
+
+let pos_of_key keypad key =
+  List.filter (fun (_, k) -> k = key) keypad |> List.hd |> fst
+
+let cost keypad =
+  let keys = List.map snd keypad in
+  let moves =
+    List.concat (List.map (fun a -> List.map (fun b -> (a, b)) keys) keys)
+  in
+  moves
+  |> List.map (fun (k1, k2) ->
+         ((k1, k2), distance (pos_of_key keypad k1) (pos_of_key keypad k2)) )
+
+let move keypad pos_key goal_key =
+  let rec move_aux keypad ((rp, cp) as pos) ((rg, cg) as goal) path =
+    if pos = goal then path
+    else if cp > cg && List.mem_assoc (rp, cp - 1) keypad then
+      move_aux keypad (rp, cp - 1) goal ('<' :: path)
+    else if rp < rg && List.mem_assoc (rp + 1, cp) keypad then
+      move_aux keypad (rp + 1, cp) goal ('v' :: path)
+    else if rp > rg && List.mem_assoc (rp - 1, cp) keypad then
+      move_aux keypad (rp - 1, cp) goal ('^' :: path)
+    else if cp < cg && List.mem_assoc (rp, cp + 1) keypad then
+      move_aux keypad (rp, cp + 1) goal ('>' :: path)
+    else
+      failwith
+        (Printf.sprintf "Cannot move from (%d,%d) to (%d,%d)" rp cp rg cg)
+  in
+  move_aux keypad (pos_of_key keypad pos_key) (pos_of_key keypad goal_key) []
+  |> List.rev
+
+let _sequence keypad keys =
+  let rec sequence_aux keypad sequence cur_key = function
+    | next_key :: rest ->
+        let m = move keypad cur_key next_key in
+        sequence_aux keypad ((m @ ['A']) :: sequence) next_key rest
+    | [] ->
+        sequence |> List.rev |> List.flatten
+  in
+  sequence_aux keypad [] 'A' keys
+
+let all_moves keypad cur_key goal_key =
+  let rec all_moves_aux keypad (rp, cp) (rg, cg) =
+    if rp = rg && cp = cg then [[]]
+    else
+      let dist = distance (rp, cp) (rg, cg) in
+      let next =
+        [ ((rp - 1, cp), '^')
+        ; ((rp, cp + 1), '>')
+        ; ((rp + 1, cp), 'v')
+        ; ((rp, cp - 1), '<') ]
+        |> List.filter (fun (p, _) -> List.mem_assoc p keypad)
+        |> List.filter (fun (p, _) -> distance p (rg, cg) < dist)
+      in
+      List.map
+        (fun ((r, c), k) ->
+          List.map (fun p -> k :: p) (all_moves_aux keypad (r, c) (rg, cg)) )
+        next
+      |> List.flatten
+  in
+  all_moves_aux keypad (pos_of_key keypad cur_key) (pos_of_key keypad goal_key)
+
+(* let rec all_sequences_aux keypad cur_key = function *)
+(*   | next_key :: rest -> *)
+(*       let all_moves = all_moves keypad cur_key next_key in *)
+(*       List.map *)
+(*         (fun m -> *)
+(*           List.map *)
+(*             (fun s -> (m @ ['A']) @ s) *)
+(*             (all_sequences_aux keypad next_key rest) ) *)
+(*         all_moves *)
+(*       |> List.flatten *)
+(*   | [] -> *)
+(*       [[]] *)
+
+let rec all_pairs acc = function
+  | a :: b :: rest ->
+      all_pairs ((a, b) :: acc) (b :: rest)
+  | _ ->
+      acc |> List.rev
+
+let estimate_cost keypad sequence =
+  let cs = cost keypad in
+  List.map
+    (fun s ->
+      ( List.map (fun p -> List.assoc p cs) (all_pairs [] s)
+        |> List.fold_left ( + ) 0
+      , s ) )
+    sequence
+
+(* let min_cost keypad sequence = *)
+(*   let cs = cost keypad in *)
+(*   List.map *)
+(*     (fun s -> *)
+(*       List.map (fun p -> List.assoc p cs) (all_pairs [] s) *)
+(*       |> List.fold_left ( + ) 0 ) *)
+(*     sequence *)
+(*   |> List.fold_left min Int.max_int *)
+
+(* let shortest_seq sequences = *)
+(*   let c_min = min_cost directional_keypad sequences in *)
+(*   estimate_cost directional_keypad sequences *)
+(*   |> List.filter (fun (c, _) -> c = c_min) *)
+(*   |> List.map snd *)
+
+(* let complexity code = *)
+(*   let code_seq = code |> String.to_seq |> List.of_seq in *)
+(*   let a = all_sequences_aux numeric_keypad 'A' code_seq |> shortest_seq in *)
+(*   let _ = Printf.printf "A\n%!" in *)
+(*   let b = *)
+(*     List.map (fun s -> all_sequences_aux directional_keypad 'A' s) a *)
+(*     |> List.flatten |> shortest_seq *)
+(*   in *)
+(*   let _ = Printf.printf "B\n%!" in *)
+(*   let c = *)
+(*     List.map (fun s -> all_sequences_aux directional_keypad 'A' s) b *)
+(*     |> List.flatten *)
+(*   in *)
+(*   let len = List.map List.length c |> List.fold_left min Int.max_int in *)
+(*   let num = int_of_string (String.sub code 0 3) in *)
+(*   let _ = Printf.printf "C\n%!" in *)
+(*   len * num *)
+
+(* let () = *)
+(*   let cplx = *)
+(*     ["539A"; "964A"; "803A"; "149A"; "789A"] *)
+(*     |> List.map complexity |> List.fold_left ( + ) 0 *)
+(*   in *)
+(*   Printf.printf "Complexity: %d\n%!" cplx *)
+
+let rules =
+  let kp = directional_keypad in
+  let keys = List.map snd kp in
+  let moves =
+    List.concat (List.map (fun a -> List.map (fun b -> (a, b)) keys) keys)
+  in
+  List.map (fun (s, t) -> ((s, t), all_moves kp s t |> estimate_cost kp)) moves
+  |> List.map (fun (r, opts) ->
+         ( r
+         , List.fold_left
+             (fun (c, s) (c', s') -> if c' < c then (c', s') else (c, s))
+             (Int.max_int, []) opts
+           |> snd
+           |> fun lst -> lst @ ['A'] ) )
+
+(* let count_moves n keys = *)
+(*   let cache = Hashtbl.create 10 in *)
+(*   let rec count_moves_aux last keys n count = *)
+(*     if n = 0 then 1 *)
+(*     else *)
+(*       match keys with *)
+(*       | key :: rest -> ( *)
+(*         try Hashtbl.find cache (last, keys, n) *)
+(*         with Not_found -> *)
+(*           let keys' = List.assoc (last, key) rules in *)
+(*           let count' = count_moves_aux 'A' keys' (n - 1) 0 in *)
+(*           let _ = Printf.printf "%d: %c -> %c [%d]\n" n last key count' in *)
+(*           let _ = *)
+(*             Printf.printf "\t%s\n%!" *)
+(*               (keys' |> List.map (String.make 1) |> String.concat "") *)
+(*           in *)
+(*           let result = count_moves_aux key rest n (count + count') in *)
+(*           Hashtbl.add cache (last, keys, n) result ; *)
+(*           result ) *)
+(*       | [] -> *)
+(*           count *)
+(*   in *)
+(*   count_moves_aux 'A' keys n 0 *)
+
+let count_moves n seq =
+  let cache = Hashtbl.create 10 in
+  let rec count_moves_aux n (src, tgt) =
+    if n = 0 then 1
+    else
+      try Hashtbl.find cache (n, (src, tgt))
+      with Not_found ->
+        let moves = all_pairs [] ('A' :: List.assoc (src, tgt) rules) in
+        let counts = List.map (fun m -> count_moves_aux (n - 1) m) moves in
+        let sum = List.fold_left ( + ) 0 counts in
+        Hashtbl.add cache (n, (src, tgt)) sum ;
+        sum
+  in
+  List.map (count_moves_aux n) (all_pairs [] ('A' :: seq))
+  |> List.fold_left ( + ) 0
+
+let numeric_sequence code =
+  let best_sequence (s, c) (s', c') = if c' < c then (s', c') else (s, c) in
+  let rec numeric_sequence_aux last keys = function
+    | key :: rest ->
+        let seq =
+          all_moves numeric_keypad last key
+          |> List.map (fun s -> s @ ['A'])
+          |> List.map (fun s -> (s, count_moves 2 s))
+          |> List.fold_left best_sequence ([], Int.max_int)
+          |> fst
+        in
+        numeric_sequence_aux key (seq :: keys) rest
+    | [] ->
+        keys |> List.rev
+  in
+  numeric_sequence_aux 'A' [] (code |> String.to_seq |> List.of_seq)
+
+let shortest_sequence n code =
+  numeric_sequence code |> List.map (count_moves n) |> List.fold_left ( + ) 0
+
+let numeric_part code = int_of_string (String.sub code 0 3)
+
+let complexity n code = shortest_sequence n code * numeric_part code
+
+let read_door_codes path = In_channel.with_open_text path In_channel.input_lines
+
+ let () =
+    read_door_codes "./input/day21/input.txt"
+  let total_complexity =
+    |> List.map (complexity 2)
+    |> List.fold_left ( + ) 0
+  in
+  Printf.printf "Complexity (2 directional keypads): %d\n%!" total_complexity
+
+(* let numeric_sequence code = *)
+(*   let best_sequence (c, s) (c', s') = if c' < c then (c', s') else (c, s) in *)
+(*   let rec numeric_sequence_aux last keys = function *)
+(*     | key :: rest -> *)
+(*         let seq = *)
+(*           all_moves numeric_keypad last key *)
+(*           |> estimate_cost directional_keypad *)
+(*           |> List.fold_left best_sequence (Int.max_int, []) *)
+(*           |> snd *)
+(*         in *)
+(*         numeric_sequence_aux key ((seq @ ['A']) :: keys) rest *)
+(*     | [] -> *)
+(*         keys |> List.rev *)
+(*   in *)
+(*   numeric_sequence_aux 'A' [] (code |> String.to_seq |> List.of_seq) *)
