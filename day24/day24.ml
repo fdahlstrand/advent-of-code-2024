@@ -88,3 +88,130 @@ let () =
     |> List.fold_left ( + ) 0
   in
   Printf.printf "Output: %d\n" out
+
+let labels = read_connections "./input/day24/input.txt"
+
+let rec _expand labels output =
+  let open Circuit in
+  let expand = _expand labels in
+  match LabelMap.find output labels with
+  | Xor (Label left, Label right) ->
+      Xor (expand left, expand right)
+  | Or (Label left, Label right) ->
+      Or (expand left, expand right)
+  | And (Label left, Label right) ->
+      And (expand left, expand right)
+  | Input _ ->
+      Label output
+  | Label label ->
+      Label label
+  | _ ->
+      failwith "That was unexpected!"
+
+let rec _expand_str labels output =
+  let open Circuit in
+  let expand_str = _expand_str labels in
+  match LabelMap.find output labels with
+  | Xor (Label left, Label right) ->
+      Printf.sprintf "[%s](%s ^ %s)" output (expand_str left) (expand_str right)
+  | Or (Label left, Label right) ->
+      Printf.sprintf "[%s](%s | %s)" output (expand_str left) (expand_str right)
+  | And (Label left, Label right) ->
+      Printf.sprintf "[%s](%s & %s)" output (expand_str left) (expand_str right)
+  | Input _ ->
+      output
+  | _ ->
+      failwith "That was unexpected!"
+
+let rec are_equal expr1 expr2 =
+  let open Circuit in
+  match (expr1, expr2) with
+  | Xor (left1, right1), Xor (left2, right2) ->
+      (are_equal left1 left2 && are_equal right1 right2)
+      || (are_equal left1 right2 && are_equal right1 left2)
+  | Or (left1, right1), Or (left2, right2) ->
+      (are_equal left1 left2 && are_equal right1 right2)
+      || (are_equal left1 right2 && are_equal right1 left2)
+  | And (left1, right1), And (left2, right2) ->
+      (are_equal left1 left2 && are_equal right1 right2)
+      || (are_equal left1 right2 && are_equal right1 left2)
+  | Input label1, Input label2 ->
+      label1 = label2
+  | Label label1, Label label2 ->
+      label1 = label2
+  | _ ->
+      false
+
+let find_expr labels expr =
+  LabelMap.filter (fun _ e -> are_equal e expr) labels
+  |> LabelMap.bindings
+  |> (fun lst -> List.nth_opt lst 0)
+  |> Option.map fst
+
+let sum_term labels output list =
+  let open Circuit in
+  let open Printf in
+  let i = int_of_string (String.sub output 1 2) in
+  let xi = sprintf "x%02d" i in
+  let yi = sprintf "y%02d" i in
+  let expr = Xor (Label xi, Label yi) in
+  (sprintf "S%02d" i, find_expr labels expr) :: list
+
+let carry1_term labels output list =
+  let open Circuit in
+  let open Printf in
+  let i = int_of_string (String.sub output 1 2) in
+  let xi = sprintf "x%02d" i in
+  let yi = sprintf "y%02d" i in
+  let expr = And (Label xi, Label yi) in
+  (sprintf "c'%02d" i, find_expr labels expr) :: list
+
+let rec carry2_term labels n prev_carry list =
+  let open Circuit in
+  let open Printf in
+  let option_to_string = function Some o -> o | None -> "[None]" in
+  if n = 45 then list
+  else
+    let s = List.assoc (sprintf "S%02d" n) list in
+    let c' = List.assoc (sprintf "c'%02d" n) list in
+    let c'' =
+      match (s, prev_carry) with
+      | Some l1, Some l2 ->
+          find_expr labels (And (Label l1, Label l2))
+      | _ ->
+          None
+    in
+    let c =
+      match (c', c'') with
+      | Some l1, Some l2 ->
+          find_expr labels (Or (Label l1, Label l2))
+      | _ ->
+          None
+    in
+    let () =
+      printf ">> %d: S=%s, c=%s, c'=%s, c''=%s\n%!" n (option_to_string s)
+        (option_to_string c) (option_to_string c') (option_to_string c'')
+    in
+    carry2_term labels (n + 1) c
+      ((sprintf "c''%02d" n, c'') :: (sprintf "c%02d" n, c) :: list)
+
+(*
+  S  (i) = x(i) ^ y(i)
+  c  (i) = c'(i) | c''(i)
+  c' (i) = x(i) & y(i)
+  c''(i) = S(i) & c(i-1)
+*)
+let () =
+  let stat = [] in
+  let stat =
+    outputs labels |> LabelMap.bindings |> List.map fst
+    |> List.fold_left (fun l e -> sum_term labels e l) stat
+  in
+  let stat =
+    outputs labels |> LabelMap.bindings |> List.map fst
+    |> List.fold_left (fun l e -> carry1_term labels e l) stat
+  in
+  let init_carry =
+    find_expr labels (Circuit.And (Circuit.Label "x00", Circuit.Label "y00"))
+  in
+  ignore (carry2_term labels 1 init_carry stat)
