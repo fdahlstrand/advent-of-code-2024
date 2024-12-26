@@ -39,6 +39,10 @@ let keypad_of_keys src dst =
   | _ ->
       failwith "Oops"
 
+let is_valid_pos keypad pos = Option.is_some (key_of_pos_opt keypad pos)
+
+let distance (r, c) (r', c') = abs (r - r') + abs (c - c')
+
 let all_moves sequence =
   let rec all_moves_aux acc = function
     | src :: dst :: rest ->
@@ -48,79 +52,50 @@ let all_moves sequence =
   in
   all_moves_aux [] ('A' :: sequence)
 
-let rec dfs f_next f_reduce f_goal s =
-  match f_goal s with
-  | Some v ->
-      v
-  | None ->
-      f_reduce (List.map (fun s' -> dfs f_next f_reduce f_goal s') (f_next s))
+let rec sequence keypad src_pos tgt_pos path =
+  if src_pos = tgt_pos then ['A' :: path |> List.rev]
+  else
+    let r, c = src_pos in
+    let dist = distance (r, c) tgt_pos in
+    [((r - 1, c), '^'); ((r, c + 1), '>'); ((r + 1, c), 'v'); ((r, c - 1), '<')]
+    |> List.filter (fun (pos, _) -> is_valid_pos keypad pos)
+    |> List.filter (fun (pos, _) -> distance pos tgt_pos < dist)
+    |> List.map (fun (pos, dir) -> sequence keypad pos tgt_pos (dir :: path))
+    |> List.flatten
 
-let cache = Hashtbl.create 10
-
-type sequence_state = {src_key: char; tgt_key: char; path: char list}
-
-type count_state = {depth: int; sequence: char list}
-
-let count_goal {depth; _} = if depth = 0 then Some 1 else None
-
-let sequence_goal {src_key; tgt_key; path} =
-  if src_key = tgt_key then Some (List.rev ('A' :: path)) else None
-
-let distance (r, c) (r', c') = abs (r - r') + abs (c - c')
-
-let print_sequence_state depth label {src_key; tgt_key; path} =
-  let indent = List.init depth (fun _ -> "  ") |> String.concat "" in
-  let path_string = List.map (String.make 1) path |> String.concat "" in
-  Printf.printf "%s%s: %c -> %c : [%s]\n%!" indent label src_key tgt_key
-    path_string
-
-let print_count_state label {depth; sequence} =
-  let indent = List.init depth (fun _ -> "  ") |> String.concat "" in
-  let seq_string = List.map (String.make 1) sequence |> String.concat "" in
-  Printf.printf "%s%s: [%s]\n%!" indent label seq_string
-
-let rec sequence_next depth ({src_key; tgt_key; path; _} as state) =
-  (* let _ = print_sequence_state depth "next seq" state in *)
+let sequence_of_key src_key tgt_key =
   let keypad = keypad_of_keys src_key tgt_key in
-  let r, c = pos_of_key keypad src_key in
-  let r', c' = pos_of_key keypad tgt_key in
-  let d = distance (r, c) (r', c') in
-  [((r - 1, c), '^'); ((r, c + 1), '>'); ((r + 1, c), 'v'); ((r, c - 1), '<')]
-  |> List.filter (fun (pos, _) -> Option.is_some (key_of_pos_opt keypad pos))
-  |> List.filter (fun (pos, _) -> distance pos (r', c') < d)
-  |> List.map (fun (pos, dir) ->
-         {state with src_key= key_of_pos keypad pos; path= dir :: path} )
+  sequence keypad (pos_of_key keypad src_key) (pos_of_key keypad tgt_key) []
 
-and sequence_reduce depth lst =
-  List.map (fun seq -> (count_moves depth seq, seq)) lst
-  |> List.fold_left
-       (fun (cnt, seq) (cnt', seq') ->
-         if cnt' < cnt then (cnt', seq') else (cnt, seq) )
-       (Int.max_int, [])
-  |> snd
+let count depth src_key tgt_key =
+  let cache = Hashtbl.create 10 in
+  let rec count_aux depth src_key tgt_key =
+    if depth = 0 then 1
+    else
+      try Hashtbl.find cache (depth, src_key, tgt_key)
+      with Not_found ->
+        let sequences = sequence_of_key src_key tgt_key |> List.map all_moves in
+        let sum =
+          List.map
+            (fun seq ->
+              List.map (fun (src, tgt) -> count_aux (depth - 1) src tgt) seq
+              |> List.fold_left ( + ) 0 )
+            sequences
+          |> List.fold_left min Int.max_int
+        in
+        Hashtbl.add cache (depth, src_key, tgt_key) sum ;
+        sum
+  in
+  count_aux depth src_key tgt_key
 
-and count_next ({sequence; depth} as state) =
-  (* let _ = print_count_state "next count" state in *)
-  (* let _ = read_line () in *)
-  let moves = all_moves sequence in
-  (* let _ = *)
-  (*   let m_str = List.map (fun (a, b) -> Printf.sprintf "(%c,%c)" a b) moves in *)
-  (*   Printf.printf ">> %s\n" (m_str |> String.concat ", ") *)
-  (* in *)
-  let depth' = depth - 1 in
-  moves
-  |> List.map (fun (src, dst) ->
-         {depth= depth'; sequence= get_sequence depth' src dst} )
+let count_code depth code =
+  code |> String.to_seq |> List.of_seq |> all_moves
+  |> List.map (fun (src, tgt) -> count depth src tgt)
+  |> List.fold_left ( + ) 0
 
-and count_reduce lst = List.fold_left ( + ) 0 lst
+let complexity depth code =
+  let len = count_code depth code in
+  let num = int_of_string (String.sub code 0 3) in
+  num * len
 
-and get_sequence depth src_key tgt_key =
-  dfs (sequence_next depth) (sequence_reduce depth) sequence_goal
-    {src_key; tgt_key; path= []}
-
-and count_moves depth sequence =
-  try Hashtbl.find cache (depth, sequence)
-  with Not_found ->
-    let count = dfs count_next count_reduce count_goal {depth; sequence} in
-    Hashtbl.add cache (depth, sequence) count ;
-    count
+let read_codes path = In_channel.with_open_text path In_channel.input_lines
