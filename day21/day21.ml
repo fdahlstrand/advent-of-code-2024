@@ -16,13 +16,9 @@ let numeric =
 let directional =
   [((0, 1), '^'); ((0, 2), 'A'); ((1, 0), '<'); ((1, 1), 'v'); ((1, 2), '>')]
 
-let key_of_pos keypad pos = List.assoc pos keypad
-
 let key_of_pos_opt keypad pos = List.assoc_opt pos keypad
 
 let pos_of_key keypad key = List.assoc key (swap keypad)
-
-let pos_of_key_opt keypad key = List.assoc_opt key (swap keypad)
 
 let keypad_of_keys src dst =
   match (src, dst) with
@@ -99,3 +95,13 @@ let complexity depth code =
   num * len
 
 let read_codes path = In_channel.with_open_text path In_channel.input_lines
+
+let () =
+  let codes = read_codes "./input/day21/input.txt" in
+  let sum2 = codes |> List.map (complexity 3) |> List.fold_left ( + ) 0 in
+  let sum25 = codes |> List.map (complexity 26) |> List.fold_left ( + ) 0 in
+  Printf.printf
+    "Complexity (2 intermediate robots): %d\n\
+     Complexity (2 intermediate robots): %d\n\
+     %!"
+    sum2 sum25
